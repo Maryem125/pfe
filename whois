@@ -1,0 +1,1109 @@
+"""import ssl
+import urllib3
+import requests,PfsenseFauxapi
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+import requests
+import requests
+import json
+
+
+
+# Configuration de l'URL de l'API pfSense
+url = "https://192.168.1.1/api/v1/firewall/rule"
+headers = {
+    "Authorization": "61646d696e 0cd245bf101d5bbbfb4d1c363d1f9198",
+    "Content-Type": "application/json"
+}
+
+data = {
+    "type": "pass",  # "pass", "block" ou "reject"
+    "interface": "lan",  # Interface sur laquelle la règle sera appliquée
+    "ipprotocol": "inet",  # "inet" pour IPv4, "inet6" pour IPv6
+    "protocol": "tcp",  # Protocole utilisé
+    "srcport": "53",  # Source de trafic
+    "dst": "192.168.1.101",  # Source de trafic
+    "src": "192.168.56.12",  # Source de trafic
+    "dstport": "80",  # Port de destination, par exemple "80" pour HTTP
+    "descr": "Description de la règle",  # Description facultative de la règle
+}
+# Envoyer une requête GET
+response = requests.post(url, headers=headers,data=json.dumps(data), verify=False)  # verify=False si certificat auto-signé
+
+http = urllib3.PoolManager()
+# Vérifier si la requête a réussi
+if response.status_code == 200:
+    print("Réponse reçue avec succès !")
+    data = response.json()
+    print(data)
+else:
+    print(f"Échec de la requête : Code d'état {response.status_code}")
+    print(response.text)"""
+
+
+
+
+'''import time
+from scapy.all import *
+from scapy.all import sniff, DNS, DNSQR
+import time
+import numpy as np
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def capture_dns_queries(duration, interface='enp0s9'):
+    """
+    Capture les requêtes DNS pendant une période donnée et calcule les statistiques demandées.
+    
+    :param duration: Durée de la capture en secondes.
+    :param interface: Interface réseau sur laquelle écouter.
+    """
+    start_time = time.time()
+    sizes = []
+
+    def handle_packet(packet):
+        """ Traite chaque paquet capturé, en filtrant pour obtenir uniquement les requêtes DNS. """
+        if packet.haslayer(DNSQR):
+            query_name = packet[DNSQR].qname
+            sizes.append(len(query_name))
+
+    # Démarrage de la capture
+    sniff(filter="udp port 53", prn=handle_packet, iface=interface, timeout=duration, store=False).show
+
+    # Calcul des statistiques une fois la capture terminée
+    if sizes:
+        size_avg = np.mean(sizes)
+        size_stdev = np.std(sizes)
+        throughput = sum(sizes) / duration
+    else:
+        size_avg = size_stdev = throughput = 0
+
+    return size_avg, size_stdev, throughput
+
+# Utilisation de la fonction
+duration = 100  # Capture pour 10 secondes
+size_avg, size_stdev, throughput = capture_dns_queries(duration)
+print(f"Average Size: {size_avg:.2f}")
+print(f"Size Standard Deviation: {size_stdev:.2f}")
+print(f"Throughput (chars/sec): {throughput:.2f}")
+
+
+from typing import Union
+from joblib import load
+from fastapi import FastAPI
+from pydantic import BaseModel
+import numpy as np
+import requests,subprocess
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import uvicorn
+from threading import Thread
+
+from main import *
+def make_prediction (len,size_avg,size_stdev,throughput):
+    url = 'http://127.0.0.1:8000/predict'  # l'URL de l'endpoint
+    data = {
+        "len": len,
+        "size_avg": size_avg ,
+        "size_stdev":size_stdev ,
+        "throughput":throughput
+            }
+    response = requests.post(url, json=data)
+    if response.status_code == 200:
+        print("Réponse reçue : ", response.json())  # Afficher la réponse JSON
+    else:
+        print("Erreur : ", response.status_code)    
+    
+    
+
+
+if __name__ == "__main__":
+    make_prediction(77,75.2,1.135292	,2.758924)
+
+  # les données nécessaires pour la prédiction de la classe de l' API
+'''
+"""from scapy.all import *
+import csv
+import json
+import joblib
+import netifaces
+import sys
+import os
+import subprocess
+import requests
+import urllib3
+import pandas as pd
+from pymisp import PyMISP
+import dns.resolver
+from string import ascii_letters, digits
+from datetime import datetime
+from scipy.stats import entropy
+from dotenv import load_dotenv
+import threading
+import time
+import re
+import socket
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+load_dotenv()
+
+def check_domain(domain):
+    MISP_URL = os.environ.get("MISP_URL")
+    MISP_KEY = os.environ.get("MISP_KEY")
+    misp = PyMISP(MISP_URL, MISP_KEY, ssl=False, debug=False)
+    response = misp.search(value=domain)
+    if response:
+        print("--- Matching Event ---")
+        print(f"Event ID: {response[0]['Event']['id']}")
+        print(f"Event Info: {response[0]['Event']['info']}")
+        print(f"Date Added: {response[0]['Event']['date']}")
+        print(f"Tags: {response[0]['Event']['date']}")
+        for tag in response[0]['Event']['Tag']:
+            print(f"- {tag['name']}")
+        print("-" * 20)
+        return True
+    else:
+        print(f"The domain {domain} is not in MISP")
+        return False
+
+def save_to_csv(filename, data):
+    with open(filename, 'a+') as f:
+        writer = csv.writer(f)
+        for row in data:
+            writer.writerow(row)
+
+def save_to_json(rows, filename):
+    donnees_json = json.dumps(rows, indent=4)
+    with open(filename, "a+") as fichier_json:
+        fichier_json.write(donnees_json)
+
+def make_prediction(len, size_avg, size_stdev, throughput):
+    url = 'http://127.0.0.1:8000/predict'
+    data = {
+        "len": len,
+        "size_avg": size_avg,
+        "size_stdev": size_stdev
+    }
+    response = requests.post(url, json=data)
+    if response.status_code == 200:
+        print("Réponse reçue : ", response.json())
+    else:
+        print("Erreur : ", response.status_code)
+
+def check_NXDOMAIN(domain):
+    resolver = dns.resolver.Resolver()
+    record_types = ["A", "AAAA", "CNAME", "MX", "NS", "SOA", "TXT"]
+    try:
+        for record_type in record_types:
+            answers = resolver.resolve(domain, record_type)
+            print(f"{record_type} records for {domain}:")
+            for rdata in answers:
+                print(f" rdata {rdata}")
+    except dns.resolver.NoAnswer:
+        print(f"No records found for {domain}")
+    except dns.resolver.NXDOMAIN:
+        print(f"NXDOMAIN: The DNS query name does not exist: {domain}")
+        return True
+    except dns.exception.Timeout:
+        print(domain)
+        print("DNS query timed out")
+    except dns.exception.DNSException as e:
+        print(f"DNS query failed: {e}")
+    return False
+
+def validate_fqdn(fqdn):
+    if len(fqdn) > 255:
+        return False
+    labels = fqdn.split('.')
+    for label in labels:
+        if len(label) > 63:
+            return False
+    label_regex = re.compile(r'^[a-z0-9-]{1,63}$', re.IGNORECASE)
+    for label in labels:
+        if not label_regex.match(label):
+            return False
+    return True
+
+def get_valid_path():
+    for i in range(3):
+        file = input("Enter the path of your pcap file: ").strip()
+        if os.path.exists(file):
+            return file
+        else:
+            print("The file doesn't exist. Please check the path.")
+            if i < 2:
+                print(f"You have {2 - i} attempts remaining.")
+            else:
+                print("You've used all your attempts. Exiting program.")
+                exit()
+
+def get_valid_port():
+    port_number = input("Please choose a port number: ").strip()
+    if port_number not in ['53', '443', '853']:
+        port_number = input("Please choose a port number for DNS: ").strip()
+    return port_number
+
+def calculate_throughput(buffer, interval=1.0):
+    while True:
+        start_time = time.time()
+        start_len = sum(len(data) for data in buffer)
+        time.sleep(interval)
+        end_time = time.time()
+        end_len = sum(len(data) for data in buffer)
+        characters_received = end_len - start_len
+        throughput = characters_received / (end_time - start_time)
+        print(f"Throughput: {throughput:.2f} characters per second")
+
+def answers(packet, ancount):
+    if DNSRR in packet:
+        ant = []
+        for i in range(ancount):
+            answer = packet[DNS].an[i]
+            ant.append({
+                'rrname': answer.rrname.decode(),
+                'type': answer.type,
+                'rclass': answer.rclass,
+                'ttl': answer.ttl,
+                'rdlen': answer.rdlen,
+                'rdata': answer.rdata,
+            })
+        df1 = pd.DataFrame(ant)
+        return ant
+    else:
+        return 'NAN'
+
+def nsanswers(packet, nscount):
+    if DNSRR in packet:
+        nst = []
+        for i in range(nscount):
+            answer = packet[DNS].ns[i]
+            nst.append({
+                'rrname': answer.rrname.decode(),
+                'type': answer.type,
+                'ttl': answer.ttl,
+                'rclass': answer.rclass
+            })
+        df2 = pd.DataFrame(nst)
+        return nst
+    else:
+        return 'NAN'
+
+def list_interfaces():
+    iface = []
+    interfaces = netifaces.interfaces()
+    for i in interfaces:
+        iface.append(i)
+    return iface
+
+def get_ip_address(domain):
+    try:
+        ip_address = socket.gethostbyname(domain)
+    except socket.gaierror:
+        ip_address = 'n/a'
+    return ip_address
+
+def handle_packet(packet):
+    rows = []
+    if DNS in packet and IP in packet:
+        data_len = len(packet[UDP].payload) if UDP in packet else len(packet[TCP].payload) if TCP in packet else 'N/A'
+        src_port = packet[UDP].sport if UDP in packet else packet[TCP].sport if TCP in packet else 'N/A'
+        dst_port = packet[UDP].dport if UDP in packet else packet[TCP].dport if TCP in packet else 'N/A'
+        protocol = 'UDP' if UDP in packet else 'TCP' if TCP in packet else 'N/A'
+        query = packet[DNS].qd.qname.decode() if packet[DNS].qd else 'N/A'
+        qr_flag = packet[DNS].qr
+        qr_type = 'Query' if qr_flag == 0 else 'Response'
+        nscount = packet[DNS].nscount
+        ancount = packet[DNS].ancount
+        qtype = packet[DNS].qd.qtype
+        qclass = packet[DNS].qd.qclass
+        nst = nsanswers(packet, nscount)
+        ant = answers(packet, ancount)
+        
+        if validate_fqdn(query) or check_NXDOMAIN(query) or check_domain(query):
+            attack = True
+            thread = threading.Thread(target=launch_script2, args=(packet[IP].dst, packet[IP].src, query, protocol, src_port, dst_port))
+            thread.start()
+        else:
+            attack = False
+        
+        rows.append({
+            'attack': attack,
+            'Source IP': packet[IP].src,
+            'Destination IP': packet[IP].dst,
+            'Source Port': src_port,
+            'Destination Port': dst_port,
+            'misp response': check_domain(query),
+            'Query': query,
+            'Protocol': protocol,
+            'request_size': data_len,
+            'QR Type': qr_type,
+            'AA': packet[DNS].ancount,
+            'TC': packet[DNS].tc,
+            'RD': packet[DNS].rd,
+            'RA': packet[DNS].ra,
+            'Opcode': packet[DNS].opcode,
+            'Autorotative': 'yes' if 'autorotation' in query.lower() else 'no',
+            'ns': nst,
+            'qclass': qclass,
+            'qtype': qtype,
+            'an': ant,
+            'qdcount': packet[DNS].qdcount,
+            'nscount': nscount,
+            'ancount': ancount,
+            'arscunt': packet[DNS].arcount,
+            'entropy_score': entropy(list(str(query).encode('utf-8')))
+        })
+
+        json_filename = "json_file_" + datetime.now().strftime('%Y-%m-%d') + '.json'
+        save_to_json(rows, json_filename)
+
+        filename = "output11.csv"
+        save_to_csv(filename, rows)
+    return rows
+
+def launch_script2(dst, src, query, protocol, src_port, dst_port):
+    args = [dst, src, query, protocol, src_port, dst_port]
+    subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"] + args)
+
+def start_live_capture(interface, port):
+    print(f"Écoute sur l'interface {interface} sur le port {port}...")
+    filter_str = f"port {port}"
+    throughput_buffer = []
+
+    def packet_callback(packet):
+        throughput_buffer.append(packet)
+        threading.Thread(target=calculate_throughput, args=(throughput_buffer, 1.0)).start()
+        threading.Thread(target=handle_packet, args=(packet,)).start()
+
+    sniff(iface=interface, filter=filter_str, prn=packet_callback)
+
+if __name__ == "__main__":
+    file = get_valid_path()
+    port = get_valid_port()
+
+    interfaces = list_interfaces()
+    print("Available interfaces:")
+    for interface in interfaces:
+        print(f"- {interface}")
+
+    interface = input("Please choose an interface: ").strip()
+
+    start_live_capture(interface, port)"""
+    
+import os,sys
+from elasticsearch import Elasticsearch
+from datetime import datetime
+import ipaddress
+import smtplib
+from email.message import EmailMessage
+from pymisp import PyMISP
+import urllib3 
+import subprocess
+from dotenv import load_dotenv
+from scapy.all import *
+load_dotenv()
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import smtplib
+"""def send_mail():
+    to_email = os.environ.get("to_email")
+    from_email = os.environ.get("from_email")
+    password = os.environ.get("email_password")  # It's safer to store passwords in environment variables
+
+    msg = MIMEMultipart()
+    
+    msg.attach(MIMEText(message, 'plain'))
+
+    msg = EmailMessage()
+    msg.set_content('une')
+    msg['Subject'] = 'script'
+    msg['To'] = to_email
+    msg['From'] = from_email
+
+    try:
+        server = smtplib.SMTP("smtp.office365.com", 587)
+        server.starttls()
+        server.login(from_email, password)
+        server.send_message(msg)
+        server.quit()
+        print("Email sent successfully")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        
+        
+        
+
+
+def sendmail(from_email, password, to_email, subject, message):
+    msg = MIMEMultipart()
+    msg['From'] = from_email
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(message, 'plain'))
+
+    try:
+        server = smtplib.SMTP('smtp.office365.com', 587)  # Using STARTTLS on port 587
+        server.ehlo()
+        server.starttls()
+        server.login(from_email, password)
+        server.sendmail(from_email, to_email, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print("Something went wrong:", str(e))
+        return False
+
+        
+if __name__=="__main__":
+    #send_mail()
+    sendmail("mariem.matoussi@outlook.com", "kpfejlguttnknplr", 'mariem.matoussi@actia-engineering.tn', 'subject', 'this is message body ; so hot ! ')"""
+"""def calculate_length_without_tld(request):
+    parts = request.split('.')
+    if len(parts) > 1:
+        return len('.'.join(parts[:-2]))
+    return len(parts[0])
+def calculate_average_size(requests):
+    # Liste pour stocker les longueurs de requêtes
+    request_lengths = []
+
+    # Ajouter la longueur de chaque requête à la liste
+    for request in requests:
+        lenn= calculate_length_without_tld(request)
+        print(lenn)
+        request_lengths.append(lenn)
+
+    # Calculer la somme des longueurs de requêtes
+    total_length = sum(request_lengths)
+
+    # Calculer la taille moyenne en divisant la somme par le nombre total de requêtes
+    if len(requests) > 0:
+        average_length = total_length / lenn
+    else:
+        average_length = 0
+
+    return average_length
+
+# Exemples de requêtes
+requests = [
+    "118.141.11.106.sbl.spamhaus.org",
+]
+# Calculer la taille moyenne des requêtes
+average_size = calculate_average_size(requests)
+print(f"Average size of requests: {average_size}")"""
+
+
+"""from scapy.all import sniff
+from scapy.layers.dns import DNS
+
+# Liste pour stocker les longueurs des requêtes DNS
+dns_lengths = []
+
+# Fonction de callback pour traiter chaque paquet capturé
+def process_packet(packet):
+    if packet.haslayer(DNS) and packet[DNS].qr == 0:  # Filtrer uniquement les requêtes DNS (qr=0)
+        # Extraire le nom de domaine et calculer sa longueur sans le TLD
+        domain_name = packet[DNS].qd.qname.decode().rstrip('.')
+        domain_parts = domain_name.split('.')
+        if len(domain_parts) > 2:  # S'assurer qu'il y a au moins un TLD
+            length_without_tld = len(domain_name) - len(domain_parts[-2]) - 1 - len(domain_parts[-1]) - 1
+            dns_lengths.append(length_without_tld)
+            print(f"Captured DNS request: {domain_name}, Length without TLD: {length_without_tld}")
+
+# Capturer les paquets DNS
+def capture_dns_traffic(interface="eth0", timeout=60):
+    print(f"Starting DNS traffic capture on interface {interface} for {timeout} seconds...")
+    sniff(iface=interface, filter="port 53", prn=process_packet, timeout=timeout)
+
+# Calculer la taille moyenne des requêtes DNS
+def calculate_average_size(lengths):
+    if lengths:
+        average_size = sum(lengths) / len(lengths)
+        return average_size
+    else:
+        return 0
+
+# Interface réseau à utiliser pour la capture
+interface = "enp0s3"
+# Durée de la capture en secondes
+capture_timeout = 60
+
+# Capturer le trafic DNS
+capture_dns_traffic(interface, capture_timeout)
+
+# Calculer et afficher la taille moyenne des requêtes DNS
+average_size = calculate_average_size(dns_lengths)
+print(f"The average size of the DNS requests (excluding TLD) is: {average_size:.2f} characters")"""
+'''1
+
+from scapy.all import *
+import csv,json
+import joblib
+import netifaces
+import sys,os
+import subprocess,requests
+import urllib3
+from scapy.all import sniff, rdpcap, DNS, IP, UDP, TCP,DNSRR
+import pandas as pd
+from pymisp import PyMISP
+import dns.resolver
+from string import ascii_letters, digits
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from scipy.stats import entropy
+import dns.exception
+from dotenv import load_dotenv
+import threading
+import time
+
+
+def check_domain(domain):
+    # url or IP address of MISP instance
+    MISP_URL = os.environ.get("MISP_URL")
+    # your API authentication key, generated using your MISP instance
+    MISP_KEY = os.environ.get("MISP_KEY")
+    # create MISP instance to interact with using Python methods
+    misp = PyMISP(MISP_URL, MISP_KEY, ssl=False, debug=False)
+    http = urllib3.PoolManager()
+    response = misp.search(value=domain)
+    if response:
+        print("--- Matching Event ---")
+        print(f"Event ID: {response[0]['Event']['id']}")
+        print(f"Event Info: {response[0]['Event']['info']}")
+        print(f"Date Added: {response[0]['Event']['date']}")
+        print(f"Tags: {response[0]['Event']['date']}")
+        for tag in response[0]['Event']['Tag']:
+            print(f"- {tag['name']}")
+        print("-" * 20)
+        return True
+    else:
+        print(f"The domain {domain} is not in MISP")
+        return False
+    
+
+check_domain("	https://144.91.122.95:8443/zc")'''
+
+
+import os
+import smtplib
+from email.message import EmailMessage
+
+'''def send_mail():
+    to_email = os.environ.get("to_email")
+    from_email = os.environ.get("from_email")
+    password = os.environ.get("email_password") 
+
+    msg = EmailMessage()
+    msg.set_content(f"Je tiens à vous informer qu'un incident de sécurité DNS a été détecté sur notre réseau. Les détails de l'incident sont les suivants :\n - Date et heure de détection : [insérer la date et l'heure] \n - Description de l'incident : [expliquer brièvement la nature de l'incident, par exemple, une tentative d'attaque par déni de service (DDoS), un détournement de DNS, etc.] \n - Impact potentiel : [décrire les conséquences possibles de l'incident sur notre système et nos utilisateurs] \n Nous sommes en train de prendre les mesures nécessaires pour contenir et résoudre cet incident, et nous vous tiendrons informé de tout développement ultérieur. \n Veuillez prendre les mesures appropriées de votre côté pour surveiller attentivement le réseau et prendre toute mesure de sécurité supplémentaire recommandée.\n N'hésitez pas à me contacter si vous avez besoin de plus amples informations ou si vous avez des questions concernant cet incident.\nCordialement, \n{os.environ.get('from_name')} \nscript")
+
+
+    msg['Subject'] = "Notification d'incident de sécurité DNS"
+    msg['To'] = to_email
+    msg['From'] = from_email
+
+    try:
+        server = smtplib.SMTP("smtp.office365.com", 587)
+        server.starttls()
+        server.login(from_email, password)
+        server.send_message(msg)
+        server.quit()
+        print("Email sent successfully")
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
+# Appel de la fonction
+send_mail()
+'''
+"""def calculate_length_without_tld(request):
+ # Retirer le point final si présent
+    request = request.rstrip('.')
+
+    parts = request.split('.')
+    if request.endswith('.'):
+        # Vérifier si le domaine a plus de deux parties
+        if len(parts) > 2:
+        # Joindre toutes les parties sauf les deux dernières
+            return len('.'.join(parts[:-2]))
+            # Si le domaine a exactement deux parties, retourner la longueur de la première partie
+        elif len(parts) == 2:
+            return len == 0
+    # Sinon, retourner la longueur du domaine
+    return len('.'.join(parts[:-2]))
+
+# Exemple d'utilisation
+request = "detectportal.firefox.com."
+length_without_tld = calculate_length_without_tld(request)
+print(f"Length without TLD: {length_without_tld}")"""
+
+from scapy.all import *
+import csv,json
+import joblib
+import netifaces
+import sys,os
+import subprocess,requests
+import urllib3
+from scapy.all import sniff, rdpcap, DNS, IP, UDP, TCP,DNSRR
+import pandas as pd
+from pymisp import PyMISP
+import dns.resolver
+from string import ascii_letters, digits
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from scipy.stats import entropy
+import dns.exception
+from dotenv import load_dotenv
+import threading
+import time
+
+
+#headers = {'Authorization': 'a050b96276f0646d380048e886dc9288'}
+
+load_dotenv()
+"""_________________________________________________MISP_________________________________________________"""
+
+
+
+def check_domain(domain):
+    # url or IP address of MISP instance
+    MISP_URL = os.environ.get("MISP_URL")
+    # your API authentication key, generated using your MISP instance
+    MISP_KEY = os.environ.get("MISP_KEY")
+    # create MISP instance to interact with using Python methods
+    misp = PyMISP(MISP_URL, MISP_KEY, ssl=False, debug=False)
+    http = urllib3.PoolManager()
+    response = misp.search(value=domain)
+    if response:
+        print("--- Matching Event ---")
+        print(f"Event ID: {response[0]['Event']['id']}")
+        print(f"Event Info: {response[0]['Event']['info']}")
+        print(f"Date Added: {response[0]['Event']['date']}")
+        print(f"Tags: {response[0]['Event']['date']}")
+        for tag in response[0]['Event']['Tag']:
+            print(f"- {tag['name']}")
+        print("-" * 20)
+        return True
+    else:
+        print(f"The domain {domain} is not in MISP")
+        return False
+    
+
+
+"_________________________________________________CONVERT TO CSV_________________________________________________"
+
+def save_to_csv(filename, data):
+
+    f = open(filename,'a+')
+    with f:
+        writer = csv.writer(f)
+        for row in data:
+            writer.writerow(row)
+
+
+
+"_________________________________________________CONVERT TO JSON________________________________________________"
+def save_to_json(rows,filename):
+
+    donnees_json = json.dumps(rows, indent=4)  # Convertir la liste en une chaîne JSON
+        # Écrire les données au format JSON dans un fichier
+    with open(filename, "a+") as fichier_json:
+        fichier_json.write(donnees_json)     
+
+
+
+"///////////////////////////////////////////////////MODEL/////////////////////////////////////////////////////////////"
+def make_prediction (len,entropy,ratio):
+    url = 'http://127.0.0.1:8000/predict'  # l'URL de l'endpoint
+    data = {
+            "len": len,
+            "entropy": entropy,
+            "uppercase_ratio":ratio
+            }
+    response = requests.post(url, json=data)
+    if response.status_code == 200:
+        print("Réponse reçue : ", response.json())  # Afficher la réponse JSON
+    else:
+        print("Erreur : ", response.status_code)    
+    
+    
+"____________________________________________________FIN MODEL_________________________________________________________"
+
+
+def calculate_entropy(request):
+    # Compter la fréquence de chaque caractère dans la requête
+    char_freq = {}
+    for char in request:
+        if char in char_freq:
+            char_freq[char] += 1
+        else:
+            char_freq[char] = 1
+
+    # Calculer l'entropie en utilisant la formule de Shannon
+    entropy = 0
+    total_chars = len(request)
+    for freq in char_freq.values():
+        probability = freq / total_chars
+        entropy -= probability * math.log2(probability)
+
+    return entropy
+
+def remove_tld(domain):
+    # Retirer le point final si présent
+    domain = domain.rstrip('.')
+
+    parts = domain.split('.')
+    if len(parts) > 2:
+        # Joindre toutes les parties sauf les deux dernières (TLD et domaine principal)
+        return '.'.join(parts[:-2])
+    elif len(parts) == 2:
+        # Si le domaine a exactement deux parties, retourner seulement la première partie
+        return parts[0]
+    else:
+        # Si le domaine n'a qu'une seule partie, retourner le domaine tel quel
+        return domain
+    
+
+
+def check_NXDOMAIN(domain):
+    resolver = dns.resolver.Resolver()
+    record_types = ["A", "AAAA", "CNAME", "MX", "NS", "SOA", "TXT"]
+    try:
+        for record_type in record_types:
+            answers = resolver.resolve(domain, record_type)
+    except dns.resolver.NoAnswer:
+        print(f"No records found for {domain}")
+    except dns.resolver.NXDOMAIN:
+        print(f"NXDOMAIN: The DNS query name does not exist: {domain}")
+        return True
+    except dns.exception.Timeout:
+        print (domain)
+        print("DNS query timed out")
+    except dns.exception.DNSException as e:
+        print(f"DNS query failed: {e}")
+    return False
+
+def uppercase_ratio_dns(request):
+ if not request: # Si la requête est vide
+   return 0
+ uppercase_count = sum(1 for char in request if char.isupper())
+ total_characters = len(request)
+ ratio = (uppercase_count / total_characters) * 100
+ return ratio
+
+
+
+def validate_fqdn(fqdn):
+
+    """Évaluation de la taille des requêtes et des réponses"""
+
+    # Vérification de la longueur totale
+    if len(fqdn) > 255:
+        return False
+    # Vérification de la longueur des labels
+    labels = fqdn.split('.')
+    for label in labels:
+        if len(label) > 63:
+            return False
+       
+    # Vérification des caractères autorisés dans chaque label
+    label_regex = re.compile(r'^[a-z0-9-]{1,63}$', re.IGNORECASE)
+    """re.IGNORECASE est utilisé pour rendre le modèle insensible à la casse"""
+
+    for label in labels:
+        if not label_regex.match(label):
+            return False
+    return True
+def get_valid_path():
+    for i in range(3):
+        file = input("Enter the path of your pcap file: ").strip()
+        if os.path.exists(file):
+            return file
+        else:
+            print("The file doesn't exist. Please check the path.")
+            if i < 2:
+                print(f"You have {2 - i } attempts remaining.")
+            else:
+                print("You've used all your attempts. Exiting program.")
+                exit()
+
+def get_valid_port ():
+   
+    port_number= input ("Please choose a port number: ").strip()
+    if port_number not in ['53','443','853']:
+        port_number= input ("Please choose a port number for dns: ").strip()
+    return(port_number)
+
+        
+def answers(packet,ancount,):
+    if DNSRR in packet:
+        ant =[]
+        for i in range(ancount):
+            for answer in packet[DNS].an:
+                ant.append({
+                    'rrname': answer.rrname.decode(),
+                    'type': answer.type,
+                    'rclass':packet[DNS].an.rclass,
+                    'ttl': answer.ttl,
+                    'rdlen': answer.rdlen,
+                    'rdata': answer.rdata,
+                })
+                df1 = pd.DataFrame(ant)
+        else :
+            ant='NAN'
+        return ant
+def nsanswers (packet, nscount):
+        if DNSRR in packet:
+            nst = []
+            for i in range (nscount):
+                nst.append({
+                    'rrname': packet[DNS].ns.rrname.decode(),
+                    'type': packet[DNS].ns.type,
+                    'ttl': packet[DNS].ns.ttl,                    
+                    'rclass':packet[DNS].ns.rclass
+                    })
+                df2= pd.DataFrame(nst)
+        else:
+                nst='NAN'
+        return nst
+def list_interfaces():
+    """
+    Returns a list of all the interfaces on the system.
+
+    Returns
+    -------
+    list
+        List of interface names (str)
+    """
+    iface = []
+    interfaces = netifaces.interfaces()
+    for i in interfaces:
+        iface.append(i)
+    return iface
+
+def get_ip_address(domain):
+    """
+    Retrieve the IP address of a domain name using the socket module.
+    If an error occurs when resolving the domain name, the function will return True.
+    Parameters:
+        domain (str): The domain name to resolve.
+    Returns:
+        str or bool: The IP address of the domain name, or True if an error occurred.
+    """
+    try:
+        ip_address = socket.gethostbyname(domain)
+       
+    except socket.gaierror:
+        ip_address='n/a'
+    return ip_address
+total_length = 0
+num_requests = 0
+
+
+
+# Fonction pour calculer la taille moyenne
+def calculate_average_length(query_length):
+    global total_length, num_requests
+    total_length += query_length
+    num_requests += 1
+    return total_length / num_requests
+
+
+
+
+
+
+    
+
+dns_lengths=[]
+def calculate_length_without_tld(request):
+ # Retirer le point final si présent
+    request = request.rstrip('.')
+
+    parts = request.split('.')
+    if request.endswith('.'):
+        # Vérifier si le domaine a plus de deux parties
+        if len(parts) > 2:
+        # Joindre toutes les parties sauf les deux dernières
+            return len('.'.join(parts[:-1]))
+            # Si le domaine a exactement deux parties, retourner la longueur de la première partie
+        elif len(parts) == 2:
+            return len == 0
+    # Sinon, retourner la longueur du domaine
+    return len('.'.join(parts[:-2]))
+    
+
+# Calculer la taille moyenne des requêtes DNS
+"""def calculate_average_size(lengths):
+    if lengths:
+        average_size = sum(lengths) / len(lengths)
+        return average_size
+    else:
+        return 0"""
+def handle_packet(packet):
+    rows=[]
+    if DNS in packet and IP in packet:
+        protocol = None
+        data_len = None
+        nst = []
+        ant =[]
+        data_len = len(packet[UDP].payload) if  UDP in packet else len(packet[TCP].payload) if TCP in packet else 'N/A'
+        src_port = packet[UDP].sport if UDP in packet else packet[TCP].sport if TCP in packet else 'N/A'
+        dst_port = packet[UDP].dport if UDP in packet else packet[TCP].dport if TCP in packet else 'N/A'
+        protocol= 'UDP'if  UDP in packet else 'TCP' if TCP in packet else 'N/A'
+        query = packet[DNS].qd.qname.decode() if packet[DNS].qd else 'N/A'
+        qr_flag = packet[DNS].qr
+        qr_type = 'Query' if packet[DNS].qr == 0 else 'Response'
+        nscount = packet[DNS].nscount
+        ancount = packet[DNS].ancount
+        qtype = packet[DNS].qd.qtype
+        qclass= packet[DNS].qd.qclass
+        nst=nsanswers(packet,nscount)
+        ant=answers(packet,ancount) 
+        length_without_tld=calculate_length_without_tld(query)
+        average_length=calculate_average_length(length_without_tld)
+        ratio=uppercase_ratio_dns(query)
+        entropy1= calculate_entropy(remove_tld(query)) if packet[DNS].qd else 'N/A'
+        print(entropy1)
+
+        modele = make_prediction(length_without_tld, entropy1,ratio)
+        if validate_fqdn(query) == True or check_NXDOMAIN (query) == True :
+            attack=True      
+            thread = threading.Thread(target=launch_script2, args=(packet[IP].dst, packet[IP].src, query, protocol, src_port, dst_port))
+            thread.start()
+        else:
+            attack=False 
+      
+               
+        # Ajouter les nouvelles informations au DataFrame
+        rows.append ({
+            'attack': attack ,
+            'Source IP': packet[IP].src,
+            'Source Port': src_port,
+            'Destination IP': packet[IP].dst,
+            'Destination Port': packet[IP].dport,
+            'modele': modele,
+            #'misp response': check_domain(query) ,
+            'Query': query,
+            'length_without_tld':length_without_tld if  packet.haslayer(DNS) and packet[DNS].qr == 0 else 'N/A',
+            #'ip of thr query':ipadd,
+            'average_length': average_length  if  packet.haslayer(DNS) and packet[DNS].qr == 0 else 'N/A',
+            'average_size': average_length,
+            'Protocol': protocol,
+            'request_size': data_len,
+            'QR Type': qr_type,
+            'AA': packet[DNS].ancount,
+            'TC': packet[DNS].tc,
+            'RD': packet[DNS].rd,
+            'RA': packet[DNS].ra,
+            'Opcode': packet[DNS].opcode,
+            'Autorotative': 'yes' if 'autorotation' in query.lower() else 'no', #1 si Autorotative et 0 sinon 
+            'ns':nst,
+            'qclass':qclass,
+            'qtype':qtype,
+            'an':ant,
+            'qdcount':packet[DNS].qdcount,
+            'nscount':nscount,
+            'ancount':ancount,
+            'arscunt':packet[DNS].arcount,
+            'entropy_score': entropy1
+        })       
+             
+          
+        json_filename= "json_file" + datetime.now().strftime('%Y-%m-%d') +'.json'
+        save_to_json(rows, json_filename)
+
+        filename = "output11.csv"
+        with open(filename, mode='w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=rows[0])
+            
+            # Écrit les en-têtes si le fichier est vide
+            writer.writeheader()
+            
+             
+            # Écrit une ligne dans le fichier CSV
+            writer.writerow(rows)
+    return rows
+    
+
+
+# Verrou pour synchroniser l'accès à la variable attacker
+lock = threading.Lock()
+
+# Fonction pour lancer script2.py
+'''def launch_script2(dst,src,query,protocol,src_port,dst_port):
+    args=[dst,src,query,protocol,src_port,dst_port]
+    global attacker
+    subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"]+ args)'''
+    
+
+def launch_script2(dst, src, query, protocol, src_port, dst_port):
+    args = [str(dst), str(src), str(query), str(protocol), str(src_port), str(dst_port)]
+    subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"] + args)
+
+        
+
+
+
+def start_live_capture(interface, port):
+    print(f"Écoute sur l'interface {interface}... (Appuyez sur Ctrl+C pour arrêter)")
+   
+    try:
+        sniff(iface=interface, filter=f"udp port  {port} ", prn=handle_packet, store=False)
+    except KeyboardInterrupt :
+        print("\nCapture arrêtée par l'utilisateur.")
+
+
+
+
+def script_launch (attack,args):
+        # Appel du deuxième script en passant les arguments
+        subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"] + args, shell=True)
+
+
+
+
+if __name__ == '__main__':
+    start= time.time()
+    #t=threading.Thread(target=lanche_fastapi).start()
+    #script_launch('192.168.1.10','192.168.1.1','domine.com','UDP')
+    data=[]
+    if len(sys.argv) > 1:
+        if os.path.exists(sys.argv[1]):
+            port_number=get_valid_port()
+            data = handle_packet(sys.argv[1])
+        else:
+            print("The file doesn't exist. Please check the path.")  
+   
+    else:
+       
+            mode= input ("Please choose to analyze a \n - pcap_file analysis :1\n - real_time analysis :2 \n")
+            if mode== "pcap_file"or mode =='1':
+                file_path = get_valid_path()
+                port_number=get_valid_port()
+                try:
+                    print(f"Lecture du fichier {file_path}...")
+                    packets = rdpcap(file_path)
+                    for packet in packets:
+                        handle_packet(packet)
+                except FileNotFoundError:
+                    print(f"Erreur : Le fichier {file_path} n'a pas été trouvé.")
+                    exit()
+                except Exception as e:
+                    print(f"Une erreur est survenue lors de la lecture du fichier : {e}")
+            elif mode =='real_time'or mode =='2':
+                port_number= get_valid_port()
+                interface = int(input(f"These are your interfaces: {list_interfaces()}. Please choose one of them.").strip())
+                if 0 <= interface < len(list_interfaces()):
+                    iface = list_interfaces()[interface-1]
+                else:
+                    iface = interface
+                start_live_capture(iface,port_number)          
+            else:
+                print("Mode inconnu, veuillez choisir entre 'temps réel' et 'fichier'.")
+                exit()
+    end=time.time()
+    temps=end-start
+    print (temps)
+
+
+
