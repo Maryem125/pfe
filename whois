@@ -16,6 +16,8 @@ import dns.exception
 from dotenv import load_dotenv
 import threading
 import time
+import tldextract
+
 
 
 #headers = {'Authorization': 'a050b96276f0646d380048e886dc9288'}
@@ -48,20 +50,6 @@ def check_domain(domain):
         print(f"The domain {domain} is not in MISP")
         return False
     
-
-
-"_________________________________________________CONVERT TO CSV_________________________________________________"
-
-def save_to_csv(filename, data):
-
-    f = open(filename,'a+')
-    with f:
-        writer = csv.writer(f)
-        for row in data:
-            writer.writerow(row)
-
-
-
 "_________________________________________________CONVERT TO JSON________________________________________________"
 def save_to_json(rows,filename):
 
@@ -73,12 +61,13 @@ def save_to_json(rows,filename):
 
 
 "///////////////////////////////////////////////////MODEL/////////////////////////////////////////////////////////////"
-def make_prediction (len,entropy,ratio):
+def make_prediction (length_without_tld, subdomain_count,entropy1,average_length):
     url = 'http://127.0.0.1:8000/predict'  # l'URL de l'endpoint
     data = {
-            "len": len,
-            "entropy": entropy,
-            "uppercase_ratio":ratio
+            "len": length_without_tld,
+            "subdomain_count": subdomain_count,
+            "entropy":entropy1,
+            "size_avg":average_length
             }
     response = requests.post(url, json=data)
     if response.status_code == 200:
@@ -227,14 +216,6 @@ def nsanswers (packet, nscount):
                 nst='NAN'
         return nst
 def list_interfaces():
-    """
-    Returns a list of all the interfaces on the system.
-
-    Returns
-    -------
-    list
-        List of interface names (str)
-    """
     iface = []
     interfaces = netifaces.interfaces()
     for i in interfaces:
@@ -242,14 +223,6 @@ def list_interfaces():
     return iface
 
 def get_ip_address(domain):
-    """
-    Retrieve the IP address of a domain name using the socket module.
-    If an error occurs when resolving the domain name, the function will return True.
-    Parameters:
-        domain (str): The domain name to resolve.
-    Returns:
-        str or bool: The IP address of the domain name, or True if an error occurred.
-    """
     try:
         ip_address = socket.gethostbyname(domain)
        
@@ -293,13 +266,7 @@ def calculate_length_without_tld(request):
     return len('.'.join(parts[:-2]))
     
 
-# Calculer la taille moyenne des requêtes DNS
-"""def calculate_average_size(lengths):
-    if lengths:
-        average_size = sum(lengths) / len(lengths)
-        return average_size
-    else:
-        return 0"""
+
 def handle_packet(packet):
     rows=[]
     if DNS in packet and IP in packet:
@@ -324,10 +291,19 @@ def handle_packet(packet):
         average_length=calculate_average_length(length_without_tld)
         ratio=uppercase_ratio_dns(query)
         entropy1= calculate_entropy(remove_tld(query)) if packet[DNS].qd else 'N/A'
-        print(entropy1)
+        dns_query = packet.getlayer(DNS).qd
+        domain_name = dns_query.qname.decode('utf-8')
+        extracted = tldextract.extract(domain_name)
+        subdomain = extracted.subdomain
 
-        modele = make_prediction(length_without_tld, entropy1,ratio)
-        if validate_fqdn(query) == True or check_NXDOMAIN (query) == True :
+        if subdomain:
+            # Compter le nombre de sous-domaines
+            subdomain_count=len(subdomain.split('.'))
+        else :
+            subdomain_count=0 
+
+        modele = make_prediction(length_without_tld, subdomain_count,entropy1,average_length)
+        if validate_fqdn(domain_name) == True or check_NXDOMAIN (domain_name) == True or check_domain (domain_name) == True or modele==True:
             attack=True      
             thread = threading.Thread(target=launch_script2, args=(packet[IP].dst, packet[IP].src, query, protocol, src_port, dst_port))
             thread.start()
@@ -338,15 +314,16 @@ def handle_packet(packet):
         # Ajouter les nouvelles informations au DataFrame
         rows.append ({
             'attack': attack ,
+            'ratio':ratio,
             'Source IP': packet[IP].src,
             'Source Port': src_port,
             'Destination IP': packet[IP].dst,
-            'Destination Port': packet[IP].dport,
+            'Destination Port': dst_port,
             'modele': modele,
-            #'misp response': check_domain(query) ,
+            'misp response': check_domain(query) ,
             'Query': query,
+            'subdomain_count':subdomain_count,
             'length_without_tld':length_without_tld if  packet.haslayer(DNS) and packet[DNS].qr == 0 else 'N/A',
-            #'ip of thr query':ipadd,
             'average_length': average_length  if  packet.haslayer(DNS) and packet[DNS].qr == 0 else 'N/A',
             'average_size': average_length,
             'Protocol': protocol,
@@ -362,27 +339,26 @@ def handle_packet(packet):
             'qclass':qclass,
             'qtype':qtype,
             'an':ant,
+            'qr_flag':qr_flag,
             'qdcount':packet[DNS].qdcount,
             'nscount':nscount,
             'ancount':ancount,
             'arscunt':packet[DNS].arcount,
             'entropy_score': entropy1
         })       
-             
-          
+        with open("output.csv", mode='a', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=rows[0].keys())
+            file_exists = os.path.isfile(file_path) and os.path.getsize(file_path) > 0
+
+            # Écrire l'en-tête seulement si le fichier n'existe pas déjà ou est vide
+            if not file_exists:
+                writer.writeheader()
+
+            writer.writerows(rows) 
         json_filename= "json_file" + datetime.now().strftime('%Y-%m-%d') +'.json'
         save_to_json(rows, json_filename)
 
-        filename = "output11.csv"
-        with open(filename, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=rows[0])
-            
-            # Écrit les en-têtes si le fichier est vide
-            writer.writeheader()
-            
-             
-            # Écrit une ligne dans le fichier CSV
-            writer.writerow(rows)
+        
     return rows
     
 
@@ -390,16 +366,9 @@ def handle_packet(packet):
 # Verrou pour synchroniser l'accès à la variable attacker
 lock = threading.Lock()
 
-# Fonction pour lancer script2.py
-'''def launch_script2(dst,src,query,protocol,src_port,dst_port):
-    args=[dst,src,query,protocol,src_port,dst_port]
-    global attacker
-    subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"]+ args)'''
-    
-
 def launch_script2(dst, src, query, protocol, src_port, dst_port):
     args = [str(dst), str(src), str(query), str(protocol), str(src_port), str(dst_port)]
-    subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"] + args)
+    subprocess.call(["python", "/home/iheb_bachouel/pfe/script2.py"] + args)
 
         
 
@@ -416,17 +385,13 @@ def start_live_capture(interface, port):
 
 
 
-def script_launch (attack,args):
-        # Appel du deuxième script en passant les arguments
-        subprocess.call(["python", "/home/osboxes/Downloads/pfe-main/test2.py"] + args, shell=True)
+
 
 
 
 
 if __name__ == '__main__':
     start= time.time()
-    #t=threading.Thread(target=lanche_fastapi).start()
-    #script_launch('192.168.1.10','192.168.1.1','domine.com','UDP')
     data=[]
     if len(sys.argv) > 1:
         if os.path.exists(sys.argv[1]):
@@ -434,9 +399,7 @@ if __name__ == '__main__':
             data = handle_packet(sys.argv[1])
         else:
             print("The file doesn't exist. Please check the path.")  
-   
     else:
-       
             mode= input ("Please choose to analyze a \n - pcap_file analysis :1\n - real_time analysis :2 \n")
             if mode== "pcap_file"or mode =='1':
                 file_path = get_valid_path()
@@ -465,6 +428,3 @@ if __name__ == '__main__':
     end=time.time()
     temps=end-start
     print (temps)
-
-
-
