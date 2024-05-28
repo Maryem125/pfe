@@ -9,6 +9,8 @@ from pymisp import PyMISP
 import urllib3 
 from dotenv import load_dotenv
 from scapy.all import *
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 
 
 load_dotenv()
@@ -51,9 +53,9 @@ def regle_de_filtrage ():
     protocole = sys.argv[4]
 
     # Configuration de l'URL de l'API pfSense
-    url = "https://192.168.1.1/api/v1/firewall/rule"
+    url = "https://192.168.20.1/api/v1/firewall/rule"
     headers = {
-        "Authorization": "61646d696e 0cd245bf101d5bbbfb4d1c363d1f9198",
+        "Authorization": "61646d696e 642d58b8535d2b22db92dfff0eb07f3d",
         "Content-Type": "application/json"
     }
     data = {
@@ -64,8 +66,8 @@ def regle_de_filtrage ():
         "srcport": "53",  # Source de trafic
         "dst": ipdest_str ,  # Source de trafic
         "src": ipsrc_str,  # Source de trafic
-        "dstport": "80",  # Port de destination, par exemple "80" pour HTTP
-        "descr": "Description de la règle",  # Description facultative de la règle
+        "dstport": any,  # Port de destination, par exemple "80" pour HTTP
+        "descr": "add by script",  # Description facultative de la règle
     }
     # Envoyer une requête GET
     response = requests.post(url, headers=headers,data=data, verify=False)  # verify=False si certificat auto-signé
@@ -100,14 +102,7 @@ Je tiens à vous informer qu'un incident de sécurité DNS a été détecté sur
 - Date et heure de détection :{time.strftime('%Y-%m-%d %H:%M:%S')}
 - Adresse IP source : {ipsrc_str}
 - Adresse IP destination : {ipdest_str}
-- Domaine : {domaine}
-
-Nous sommes en train de prendre les mesures nécessaires pour contenir et résoudre cet incident, et nous vous tiendrons informé de tout développement ultérieur. 
-Veuillez prendre les mesures appropriées de votre côté pour surveiller attentivement le réseau et prendre toute mesure de sécurité supplémentaire recommandée.
-N'hésitez pas à me contacter si vous avez besoin de plus amples informations ou si vous avez des questions concernant cet incident.
- 
-cordialement,   
-script""" )
+- Domaine : {domaine}""" )
 
 
     msg['Subject'] = "Notification d'incident de sécurité DNS"
@@ -127,11 +122,14 @@ script""" )
 
 """--------------------------------------------------------------------------------------------------------ELK--------------------------------------------------------------------------------------------------------"""
 def create_daily_index():
+    ipdest_str = sys.argv[1]
+    ipsrc_str = sys.argv[2]
+    domaine = sys.argv[3]
     # Informations d'identification
     username = 'elastic'
-    password = 'WxtHti6aUxMsJZ4tyG2q'
+    password = 'elastic'
     # Connexion à Elasticsearch avec authentification
-    es = Elasticsearch(os.getenv('ELK_URL'), basic_auth=(username, password))
+    es = Elasticsearch('http://192.168.20.10:9200', basic_auth=(username, password))
 
     # Vérification de la connexion
     print (es.ping())
@@ -162,26 +160,13 @@ def create_daily_index():
                 "request" :  sys.argv[3] ,
     }
     res = es.index(index=index_name, body=log)
-    # Effectuer la recherche
-    response = es.search(
-        index=index_name,
-        body={
-            "query": {
-                "match_all": {
-                "SRC_IP" : sys.argv[1],
-                "DST_IP" : sys.argv[2],
-                "request_date" :  datetime.now().isoformat() + 'Z',
-                "request" :  sys.argv[3] ,}
-            }
-        }
-    )
-    print(response)
+ 
 "//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
 
 
 if __name__ == '__main__':
     send_mail()
-    regle_de_filtrage() 
-    target= create_daily_index() 
+    #regle_de_filtrage() 
+    create_daily_index() 
     
 
